@@ -1,0 +1,13 @@
+# Environment and Dependencies
+backend/.venv
+frontend/node_modules
+*.pyc
+__pycache__/
+
+# Build Outputs
+frontend/dist
+frontend/.vite
+
+# Downloads
+VDO/*
+!VDO/.gitkeep

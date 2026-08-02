@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  autodownload-vdo:
+    build: .
+    container_name: autodownload-vdo
+    ports:
+      - "8000:8000"
+    volumes:
+      # Automatically maps downloaded videos inside Docker directly to your host VDO folder
+      - ./VDO:/app/VDO
+      # (Optional) Uncomment below to provide Netscape cookies.txt for restricted/private video downloading
+      # - ./cookies.txt:/app/cookies.txt:ro
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Bangkok
