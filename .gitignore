@@ -11,3 +11,5 @@ frontend/.vite
 # Downloads
 VDO/*
 !VDO/.gitkeep
+*.png
+.DS_Store

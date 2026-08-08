@@ -23,6 +23,9 @@ WORKDIR /app/backend
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install Playwright Chromium and system dependencies
+RUN playwright install chromium --with-deps
+
 # Copy Python backend application logic
 COPY backend/ ./
 
