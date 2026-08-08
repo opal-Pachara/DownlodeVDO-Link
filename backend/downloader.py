@@ -252,21 +252,22 @@ def download_image(url: str, target_folder: str = None) -> dict:
             
         logger.info(f"Downloading image from {url} to {filepath}")
         
-        req = urllib.request.Request(
-            url, 
-            data=None, 
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-            }
-        )
-        
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        
-        with urllib.request.urlopen(req, timeout=30, context=ctx) as response, open(filepath, 'wb') as out_file:
-            out_file.write(response.read())
-            
+        import requests
+        try:
+            response = requests.get(
+                url, 
+                headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'},
+                timeout=(10, 30),
+                stream=True
+            )
+            response.raise_for_status()
+            with open(filepath, 'wb') as out_file:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:
+                        out_file.write(chunk)
+        except Exception as e:
+            logger.error(f"Failed to download image {url}: {e}")
+            return {"success": False, "error": str(e)}
         rel_path = f"{folder_name}/{filename}"
         
         return {
