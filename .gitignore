@@ -13,4 +13,4 @@ VDO/*
 !VDO/.gitkeep
 *.png
 .DS_Store
-.env
+image/
