@@ -145,7 +145,7 @@ async def run_background_download_job(job_id: str, url: str, download_type: str 
             cookie_path = os.path.join(project_root, "cookies.txt")
             cookie_file = cookie_path if os.path.exists(cookie_path) else None
             
-            scrape_result = await scraper.scrape_facebook_page(url, max_scrolls=80, cookie_file=cookie_file)
+            scrape_result = await scraper.scrape_facebook_page(url, max_scrolls=500, cookie_file=cookie_file)
             
             if scrape_result.get("success") and scrape_result.get("video_urls"):
                 page_name = scrape_result["page_name"]

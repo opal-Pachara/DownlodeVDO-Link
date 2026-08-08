@@ -225,7 +225,21 @@ async def scrape_facebook_page(url: str, max_scrolls: int = 80, cookie_file: str
                 # Perform simulated keyboard and mouse scrolling to trigger React event listeners
                 await page.keyboard.press("End")
                 await page.mouse.wheel(0, 5000)
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                await page.evaluate('''() => {
+                    window.scrollBy(0, 5000);
+                    window.scrollTo(0, document.body.scrollHeight);
+                    const elements = document.querySelectorAll('*');
+                    for (let i = 0; i < elements.length; i++) {
+                        const el = elements[i];
+                        if (el.scrollHeight > el.clientHeight) {
+                            const style = window.getComputedStyle(el);
+                            if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                el.scrollTop += 5000;
+                                el.dispatchEvent(new Event('scroll', { bubbles: true }));
+                            }
+                        }
+                    }
+                }''')
                 await asyncio.sleep(3.5)
                 
             await browser.close()
