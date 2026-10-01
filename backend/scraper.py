@@ -426,6 +426,17 @@ async def scrape_facebook_page(url: str, max_scrolls: int = 1500, cookie_file: s
                         document.body.style.position = 'relative';
                         document.documentElement.style.overflow = 'auto';
                         window.scrollBy(0, 5000);
+                        const elements = document.querySelectorAll('*');
+                        for (let i = 0; i < elements.length; i++) {
+                            const el = elements[i];
+                            if (el.scrollHeight > el.clientHeight) {
+                                const style = window.getComputedStyle(el);
+                                if (style.overflowY === 'auto' || style.overflowY === 'scroll') {
+                                    el.scrollTop += 5000;
+                                    el.dispatchEvent(new Event('scroll', { bubbles: true }));
+                                }
+                            }
+                        }
                     }''')
                     
                     # Extract DOM anchor links strictly from main feed container and check for Facebook recommendations boundary
