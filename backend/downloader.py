@@ -6,6 +6,9 @@ from urllib.parse import urlparse
 import urllib.request
 import ssl
 import uuid
+import json
+import shutil
+import time
 import yt_dlp
 from yt_dlp.networking.impersonate import ImpersonateTarget
 
@@ -21,8 +24,6 @@ logging.basicConfig(
 logger = logging.getLogger("VideoDownloader")
 
 SUPPORTED_DOMAINS = [
-    "youtube.com",
-    "youtu.be",
     "tiktok.com",
     "facebook.com",
     "fb.watch",
@@ -47,9 +48,12 @@ def is_supported_url(url: str) -> tuple[bool, str]:
         elif netloc.startswith("l.facebook.com") or netloc.startswith("l.instagram.com"):
             netloc = netloc[2:]
             
+        if "youtube.com" in netloc or "youtu.be" in netloc:
+            return False, "YouTube downloads are disabled. Supported platforms: TikTok, Facebook, Instagram."
+            
         is_matched = any(netloc == domain or netloc.endswith(f".{domain}") for domain in SUPPORTED_DOMAINS)
         if not is_matched:
-            return False, f"Unsupported domain ({netloc}). Supported platforms: YouTube, TikTok, Facebook, Instagram."
+            return False, f"Unsupported domain ({netloc}). Supported platforms: TikTok, Facebook, Instagram."
         
         return True, ""
     except Exception as e:
@@ -68,45 +72,108 @@ def process_download(url: str, target_folder: str = None) -> dict:
     os.makedirs(downloads_dir, exist_ok=True)
     
     # Configure outtmpl based on whether a specific target creator/page folder was supplied
-    if target_folder and target_folder.strip():
-        safe_folder = re.sub(r'[\\/*?:"<>|]', "_", target_folder.strip())
-        save_tmpl = os.path.join(downloads_dir, safe_folder, '%(title).100s_%(id)s.%(ext)s')
-        os.makedirs(os.path.join(downloads_dir, safe_folder), exist_ok=True)
+    safe_folder = re.sub(r'[\r\n\t\\/*?:"<>|]', "_", target_folder.strip()).strip('. ') if target_folder and target_folder.strip() else None
+    if safe_folder:
+        target_dir = os.path.join(downloads_dir, safe_folder)
+        save_tmpl = os.path.join(target_dir, '%(title).100s_%(id)s.%(ext)s')
+        os.makedirs(target_dir, exist_ok=True)
     else:
         # Auto-organize by uploader, channel, or playlist title if target_folder is not specified
         save_tmpl = os.path.join(downloads_dir, '%(channel,uploader,playlist_title|General_Clips)s', '%(title).100s_%(id)s.%(ext)s')
     
+    # Check if this video has already been downloaded (skip existing within target folder)
+    video_id_match = re.search(r'/video/(\d+)', url) or re.search(r'/(?:reel|reels)/([A-Za-z0-9_\-]+)', url) or re.search(r'/p/([A-Za-z0-9_\-]+)', url)
+    if video_id_match:
+        vid_id = video_id_match.group(1)
+        # Strictly search ONLY within target_dir if safe_folder was specified to guarantee no cross-creator file pollution
+        search_dirs = [target_dir] if safe_folder else [downloads_dir]
+        
+        found_existing = False
+        for s_dir in search_dirs:
+            if found_existing:
+                break
+            if os.path.exists(s_dir):
+                for root_d, _, files in os.walk(s_dir):
+                    for f in files:
+                        # Strict ID match (e.g. title_vidid.mp4 or _vidid.) rather than loose substring match
+                        if (f.endswith(f"_{vid_id}.mp4") or f.endswith(f"_{vid_id}.webm") or f.endswith(f"_{vid_id}.mkv") or f"_{vid_id}." in f) and not f.endswith('.part'):
+                            existing_file = os.path.join(root_d, f)
+                            rel_path = os.path.relpath(existing_file, downloads_dir).replace('\\', '/')
+                            logger.info(f"File for video {vid_id} already exists in {rel_path}. Skipping re-download.")
+                            return {
+                                "success": True,
+                                "skipped": True,
+                                "items": [{
+                                    "filename": os.path.basename(existing_file),
+                                    "rel_path": rel_path,
+                                    "download_url": f"/files/{rel_path}",
+                                    "title": os.path.basename(existing_file)
+                                }],
+                                "filename": os.path.basename(existing_file),
+                                "download_url": f"/files/{rel_path}"
+                            }
+
     logger.info(f"Starting download for URL: {url} into template: {save_tmpl}")
     
-    # Configure base yt-dlp options for Apple-compatible codecs and safe filenames
+    # Configure base yt-dlp options for highest original quality and safe filenames
     base_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'format_sort': ['vcodec:h264', 'acodec:aac'],
+        'format': 'bestvideo+bestaudio/best',
+        'format_sort': ['res', 'fps', 'br', 'size'],
         'merge_output_format': 'mp4',
+        'postprocessors': [{
+            'key': 'FFmpegVideoRemuxer',
+            'preferedformat': 'mp4',
+        }],
         'outtmpl': save_tmpl,
         'restrictfilenames': True,
-        'noplaylist': False,  # Allow playlists and channels to be processed
+        'windowsfilenames': True,
+        'trim_file_name': 100,
+        'noplaylist': False,          # Allow playlists and channels to be processed
         'overwrites': True,
         'quiet': True,
         'no_warnings': True,
-        'socket_timeout': 35,
+        'socket_timeout': 60,         # Increased from 35s to handle slow FB/IG servers
         'extract_flat': False,
         'nocheckcertificate': True,
+        # Retry & resilience settings
+        'retries': 5,                 # Retry individual fragments up to 5 times
+        'fragment_retries': 8,        # Retry video fragments 8 times before giving up
+        'file_access_retries': 3,
+        'sleep_interval': 1,          # Wait 1s between retries to avoid rate-limiting
+        'max_sleep_interval': 5,
+        'ignoreerrors': True,         # Don't abort entire playlist/batch on a single failure
+        'concurrent_fragment_downloads': 4,  # Download 4 fragments in parallel (faster)
+        # HTTP headers to look more like a real browser
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        },
     }
 
     # Automatically utilize cookies.txt if provided in root folder (especially helpful inside Docker containers)
     cookie_file_path = os.path.join(project_root, "cookies.txt")
-    if os.path.exists(cookie_file_path) and os.path.isfile(cookie_file_path):
+    if os.path.exists(cookie_file_path) and os.path.isfile(cookie_file_path) and os.path.getsize(cookie_file_path) > 0:
         base_opts["cookiefile"] = cookie_file_path
         logger.info(f"Using exported Netscape cookies file located at {cookie_file_path}")
 
-    # Define fallback strategies for resilient extraction across Facebook, TikTok, Instagram, and YouTube
-    download_attempts = [
-        {"desc": "Standard extraction", "opts": {}},
-        {"desc": "Chrome session cookies", "opts": {"cookiesfrombrowser": ("chrome", )}},
-        {"desc": "Safari session cookies", "opts": {"cookiesfrombrowser": ("safari", )}},
-        {"desc": "Chrome browser TLS impersonation", "opts": {"impersonate": ImpersonateTarget("chrome")}},
-    ]
+    # Define fallback strategies for resilient extraction across TikTok, Facebook, and Instagram
+    is_tiktok = "tiktok.com" in url.lower()
+    if is_tiktok:
+        download_attempts = [
+            {"desc": "Chrome browser TLS impersonation", "opts": {"impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Chrome session cookies + TLS impersonation", "opts": {"cookiesfrombrowser": ("chrome", ), "impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Edge session cookies + TLS impersonation",  "opts": {"cookiesfrombrowser": ("edge", ), "impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Standard extraction", "opts": {}},
+        ]
+    else:
+        download_attempts = [
+            {"desc": "Standard extraction", "opts": {}},
+            {"desc": "Chrome session cookies", "opts": {"cookiesfrombrowser": ("chrome", )}},
+            {"desc": "Edge session cookies",  "opts": {"cookiesfrombrowser": ("edge", )}},
+            {"desc": "Firefox session cookies", "opts": {"cookiesfrombrowser": ("firefox", )}},
+            {"desc": "Chrome browser TLS impersonation", "opts": {"impersonate": ImpersonateTarget("chrome")}},
+        ]
 
     last_error = None
     for attempt_idx, strategy in enumerate(download_attempts, start=1):
@@ -140,16 +207,29 @@ def process_download(url: str, target_folder: str = None) -> dict:
                     if not filepath or not os.path.exists(filepath):
                         video_id = entry.get('id')
                         if video_id:
-                            # Walk through VDO and all creator subfolders to find the downloaded file
-                            for root_dir, _, files in os.walk(downloads_dir):
+                            # Prioritize search in target_dir if specified, otherwise downloads_dir
+                            search_root = target_dir if safe_folder else downloads_dir
+                            for root_dir, _, files in os.walk(search_root):
                                 for fname in files:
-                                    if video_id in fname and not fname.endswith('.part'):
+                                    if (fname.endswith(f"_{video_id}.mp4") or f"_{video_id}." in fname) and not fname.endswith('.part'):
                                         filepath = os.path.join(root_dir, fname)
                                         break
                                 if filepath and os.path.exists(filepath):
                                     break
                                     
                     if filepath and os.path.exists(filepath):
+                        # Ensure clips are not saved into an empty or '_' folder if uploader was missing
+                        parent_folder = os.path.basename(os.path.dirname(filepath))
+                        if parent_folder in ['_', '']:
+                            clean_dir = os.path.join(downloads_dir, 'General_Clips')
+                            os.makedirs(clean_dir, exist_ok=True)
+                            new_path = os.path.join(clean_dir, os.path.basename(filepath))
+                            try:
+                                if not os.path.exists(new_path):
+                                    shutil.move(filepath, new_path)
+                                    filepath = new_path
+                            except Exception:
+                                pass
                         rel_path = os.path.relpath(filepath, downloads_dir)
                         # Replace backslashes on Windows for URL URLs
                         url_path = rel_path.replace('\\', '/')
@@ -175,6 +255,13 @@ def process_download(url: str, target_folder: str = None) -> dict:
             logger.warning(f"Strategy '{strategy['desc']}' failed for {url}: {strip_ansi(str(e))}")
             continue
 
+    # If all yt-dlp strategies failed for a TikTok video, execute direct TikWM CDN fallback
+    if is_tiktok:
+        logger.info(f"yt-dlp strategies hit rate limit/WAF for {url}. Attempting high-speed TikWM CDN stream fallback...")
+        tikwm_result = download_tiktok_fallback(url, target_folder=safe_folder or target_folder)
+        if tikwm_result.get("success"):
+            return tikwm_result
+
     # If all fallback strategies fail, return cleaned error feedback
     raw_msg = strip_ansi(str(last_error)) if last_error else "Unknown error occurred"
     err_str = raw_msg.lower()
@@ -194,6 +281,88 @@ def process_download(url: str, target_folder: str = None) -> dict:
             error_msg = error_msg.split("ERROR:", 1)[-1].strip()
             
     return {"success": False, "error": f"Download failed: {error_msg}"}
+
+def download_tiktok_fallback(url: str, target_folder: str = None) -> dict:
+    """
+    High-reliability fallback for TikTok videos when yt-dlp encounters HTTP 403 Forbidden or WAF challenge.
+    Resolves direct high-definition CDN stream from TikWM API and streams MP4 file directly to disk.
+    """
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(backend_dir)
+    downloads_dir = os.path.join(project_root, "VDO")
+    safe_folder = re.sub(r'[\r\n\t\\/*?:"<>|]', "_", target_folder.strip()).strip('. ') if target_folder and target_folder.strip() else "TikTok_Clips"
+    target_dir = os.path.join(downloads_dir, safe_folder)
+    os.makedirs(target_dir, exist_ok=True)
+    
+    vid_match = re.search(r'/video/(\d+)', url)
+    vid_id = vid_match.group(1) if vid_match else str(uuid.uuid4())[:8]
+
+    # Check if already present
+    if os.path.exists(target_dir):
+        for f in os.listdir(target_dir):
+            if vid_id in f and (f.endswith('.mp4') or f.endswith('.webm')) and not f.endswith('.part'):
+                rel_path = os.path.relpath(os.path.join(target_dir, f), downloads_dir).replace('\\', '/')
+                return {
+                    "success": True,
+                    "skipped": True,
+                    "items": [{"filename": f, "rel_path": rel_path, "download_url": f"/files/{rel_path}", "title": f}],
+                    "filename": f,
+                    "download_url": f"/files/{rel_path}"
+                }
+
+    api_url = f"https://www.tikwm.com/api/?url={url}&hd=1"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*'
+    }
+
+    for attempt in range(1, 4):
+        try:
+            req = urllib.request.Request(api_url, headers=headers)
+            with urllib.request.urlopen(req, timeout=12) as response:
+                payload = json.loads(response.read().decode('utf-8', errors='ignore'))
+                
+            if payload.get("code") == 0 and payload.get("data"):
+                data = payload["data"]
+                # Prioritize HD stream URL (1080p/720p without watermark)
+                play_url = data.get("hdplay") or data.get("play") or data.get("wmplay")
+                raw_title = data.get("title") or f"TikTok_video_{vid_id}"
+                clean_title = re.sub(r'[\r\n\t\\/*?:"<>|]', "_", raw_title)
+                clean_title = re.sub(r'[_ .]+$', '', clean_title).strip('. ')[:80]
+                if not clean_title:
+                    clean_title = f"TikTok_video_{vid_id}"
+                filename = f"{clean_title}_{vid_id}.mp4"
+                file_dest = os.path.join(target_dir, filename)
+
+                if play_url:
+                    stream_req = urllib.request.Request(play_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(stream_req, timeout=30) as stream_resp, open(file_dest, 'wb') as out_f:
+                        while True:
+                            chunk = stream_resp.read(64 * 1024)
+                            if not chunk:
+                                break
+                            out_f.write(chunk)
+
+                    if os.path.exists(file_dest) and os.path.getsize(file_dest) > 1000:
+                        rel_path = os.path.relpath(file_dest, downloads_dir).replace('\\', '/')
+                        logger.info(f"TikWM CDN Fallback successfully saved TikTok video {vid_id} -> {rel_path} ({os.path.getsize(file_dest)} bytes)")
+                        return {
+                            "success": True,
+                            "items": [{
+                                "filename": filename,
+                                "rel_path": rel_path,
+                                "download_url": f"/files/{rel_path}",
+                                "title": raw_title
+                            }],
+                            "filename": filename,
+                            "download_url": f"/files/{rel_path}"
+                        }
+            time.sleep(1.2)
+        except Exception as e:
+            logger.warning(f"[TikWM Fallback Attempt {attempt}/3] Error for {url}: {e}")
+            time.sleep(1.2)
+
+    return {"success": False, "error": "All TikTok download strategies (yt-dlp + TikWM fallback) failed."}
 
 def download_image(url: str, target_folder: str = None) -> dict:
     if not url or not url.strip():

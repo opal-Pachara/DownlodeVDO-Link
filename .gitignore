@@ -1,16 +1,81 @@
-# Environment and Dependencies
-backend/.venv
-frontend/node_modules
-*.pyc
+# ==========================================
+# Python & Virtual Environments
+# ==========================================
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/.venv/
+.venv/
+env/
+venv/
+ENV/
+*.manifest
+*.spec
 
-# Build Outputs
-frontend/dist
-frontend/.vite
+# ==========================================
+# Node.js & Frontend Build Outputs
+# ==========================================
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Downloads
+# ==========================================
+# Secret Keys, Auth & Configurations
+# ==========================================
+.env
+.env.local
+.env.*.local
+cookies.txt
+accounts.google.com_cookies.txt
+
+# ==========================================
+# Media Downloads & Processed Video Storage
+# ==========================================
 VDO/*
 !VDO/.gitkeep
+VDO_processed/*
+!VDO_processed/.gitkeep
+VDO_posted/*
+!VDO_posted/.gitkeep
+image/*
+!image/.gitkeep
+downloads/*
+!downloads/.gitkeep
+
+# Video & Media Extensions (safety net)
+*.mp4
+*.m4a
+*.mp3
+*.webm
+*.mkv
+*.avi
+*.part
+*.ytdl
+
+# ==========================================
+# Temporary Files, Dumps & Logs
+# ==========================================
+scratch/
+reels_links.txt
+graphql_sample.json
 *.png
+*.jpg
+*.jpeg
+*.log
+
+# ==========================================
+# OS & IDE Specific Files
+# ==========================================
 .DS_Store
-image/
+Thumbs.db
+ehthumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

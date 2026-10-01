@@ -1,25 +1,72 @@
-# Git
+# ==========================================
+# Git & Version Control
+# ==========================================
 .git
 .gitignore
 
-# Python
+# ==========================================
+# Secret Keys & Environment Variables
+# ==========================================
+.env
+.env.*
+cookies.txt
+accounts.google.com_cookies.txt
+
+# ==========================================
+# Python Environments & Cache
+# ==========================================
 backend/.venv
-backend/__pycache__
+.venv
+env/
+venv/
+**/__pycache__
 *.pyc
 *.pyo
+*.pyd
 
-# Node
+# ==========================================
+# Node.js & Frontend Cache
+# ==========================================
 frontend/node_modules
+**/node_modules
 frontend/.vite
 frontend/dist
 
-# Video Data
+# ==========================================
+# Media Downloads & Heavy Storage Folders
+# ==========================================
 VDO/
+VDO_processed/
+VDO_posted/
+image/
 downloads/
 *.mp4
+*.m4a
+*.mp3
 *.webm
+*.mkv
 *.part
+*.ytdl
 
-# OS generated files
+# ==========================================
+# Documentation, Temporary & Test Files
+# ==========================================
+scratch/
+reels_links.txt
+graphql_sample.json
+*.png
+*.jpg
+*.jpeg
+*.log
+*.bat
+*.md
+test_*.py
+
+# ==========================================
+# OS & Editor Artifacts
+# ==========================================
 .DS_Store
 Thumbs.db
+ehthumbs.db
+.vscode/
+.idea/
