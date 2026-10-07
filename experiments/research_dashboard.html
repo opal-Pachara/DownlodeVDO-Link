@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Fingerprint Research — Results Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 2rem;
+  }
+  
+  .header {
+    text-align: center;
+    margin-bottom: 3rem;
+  }
+  
+  .header h1 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6, #ec4899);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+  
+  .header p {
+    color: #94a3b8;
+    font-size: 1rem;
+  }
+  
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 3rem;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  
+  .stat-card {
+    background: linear-gradient(145deg, #1e293b, #1a2332);
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15);
+  }
+  
+  .stat-card .value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #3b82f6;
+    display: block;
+    margin-bottom: 0.3rem;
+  }
+  
+  .stat-card .label {
+    font-size: 0.85rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 2rem;
+    max-width: 1400px;
+    margin: 0 auto 3rem;
+  }
+  
+  .chart-card {
+    background: linear-gradient(145deg, #1e293b, #1a2332);
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 1.5rem;
+  }
+  
+  .chart-card h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #334155;
+  }
+  
+  .chart-container {
+    position: relative;
+    height: 350px;
+  }
+  
+  .full-width {
+    grid-column: 1 / -1;
+  }
+  
+  .table-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    overflow-x: auto;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #1e293b;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  
+  th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    text-align: left;
+  }
+  
+  td {
+    padding: 10px 16px;
+    border-top: 1px solid #334155;
+    font-size: 0.9rem;
+  }
+  
+  tr:hover td {
+    background: #1a2332;
+  }
+  
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  
+  .badge-detected {
+    background: #065f46;
+    color: #6ee7b7;
+  }
+  
+  .badge-not-detected {
+    background: #7f1d1d;
+    color: #fca5a5;
+  }
+  
+  .footer {
+    text-align: center;
+    margin-top: 3rem;
+    padding: 2rem;
+    color: #64748b;
+    font-size: 0.85rem;
+  }
+  
+  .footer strong {
+    color: #94a3b8;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔬 Video Fingerprint Research Dashboard</h1>
+  <p>Perceptual Hash Robustness Analysis — Generated 2026-10-07 00:21:20</p>
+</div>
+
+<div class="stats-grid">
+  <div class="stat-card">
+    <span class="value">48</span>
+    <span class="label">Total Experiments</span>
+  </div>
+  <div class="stat-card">
+    <span class="value">93.8%</span>
+    <span class="label">Detection Rate</span>
+  </div>
+  <div class="stat-card">
+    <span class="value">96.4%</span>
+    <span class="label">Mean Similarity</span>
+  </div>
+  <div class="stat-card">
+    <span class="value">99.9%</span>
+    <span class="label">Median Similarity</span>
+  </div>
+  <div class="stat-card">
+    <span class="value">8.6%</span>
+    <span class="label">Std Deviation</span>
+  </div>
+  <div class="stat-card">
+    <span class="value">0.0%</span>
+    <span class="label">False Negative Rate</span>
+  </div>
+</div>
+
+<div class="charts-grid">
+  <div class="chart-card">
+    <h3>📊 Detection Rate by Category</h3>
+    <div class="chart-container">
+      <canvas id="detectionChart"></canvas>
+    </div>
+  </div>
+  
+  <div class="chart-card">
+    <h3>📈 Mean Similarity by Category</h3>
+    <div class="chart-container">
+      <canvas id="similarityChart"></canvas>
+    </div>
+  </div>
+  
+  <div class="chart-card full-width">
+    <h3>🎯 Similarity Score per Experiment</h3>
+    <div class="chart-container" style="height: 450px;">
+      <canvas id="scatterChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="table-container">
+  <h2 style="font-size: 1.3rem; margin-bottom: 1rem; color: #f1f5f9;">
+    📋 Detailed Results
+  </h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Experiment</th>
+        <th>Category</th>
+        <th>Similarity</th>
+        <th>Detection</th>
+        <th>Confidence</th>
+        <th>Time (ms)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>original</code></td>
+        <td>original</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4734.8</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_start_0.5s</code></td>
+        <td>temporal</td>
+        <td>99.9%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>8553.8</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_start_1.0s</code></td>
+        <td>temporal</td>
+        <td>99.9%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>6690.1</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_start_1.5s</code></td>
+        <td>temporal</td>
+        <td>99.7%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>7250.4</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_start_2.0s</code></td>
+        <td>temporal</td>
+        <td>99.7%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>8219.5</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_end_0.5s</code></td>
+        <td>temporal</td>
+        <td>99.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>6171.2</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_end_1.0s</code></td>
+        <td>temporal</td>
+        <td>99.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4419.1</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_end_1.5s</code></td>
+        <td>temporal</td>
+        <td>99.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>7218.1</td>
+      </tr>
+      <tr>
+        <td><code>temporal_trim_end_2.0s</code></td>
+        <td>temporal</td>
+        <td>99.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4710.0</td>
+      </tr>
+      <tr>
+        <td><code>temporal_speed_0.97x</code></td>
+        <td>temporal</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3849.3</td>
+      </tr>
+      <tr>
+        <td><code>temporal_speed_0.98x</code></td>
+        <td>temporal</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4567.7</td>
+      </tr>
+      <tr>
+        <td><code>temporal_speed_1.02x</code></td>
+        <td>temporal</td>
+        <td>99.9%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4302.3</td>
+      </tr>
+      <tr>
+        <td><code>temporal_speed_1.03x</code></td>
+        <td>temporal</td>
+        <td>99.6%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3866.6</td>
+      </tr>
+      <tr>
+        <td><code>spatial_crop_5pct</code></td>
+        <td>spatial</td>
+        <td>99.7%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3472.4</td>
+      </tr>
+      <tr>
+        <td><code>spatial_crop_10pct</code></td>
+        <td>spatial</td>
+        <td>89.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>99.8%</td>
+        <td>3203.1</td>
+      </tr>
+      <tr>
+        <td><code>spatial_crop_15pct</code></td>
+        <td>spatial</td>
+        <td>89.3%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>99.2%</td>
+        <td>4106.1</td>
+      </tr>
+      <tr>
+        <td><code>spatial_center_crop</code></td>
+        <td>spatial</td>
+        <td>65.2%</td>
+        <td><span class="badge badge-not-detected">NOT_DETECTED</span></td>
+        <td>65.2%</td>
+        <td>2433.4</td>
+      </tr>
+      <tr>
+        <td><code>spatial_aspect_9x16</code></td>
+        <td>spatial</td>
+        <td>64.8%</td>
+        <td><span class="badge badge-not-detected">NOT_DETECTED</span></td>
+        <td>64.8%</td>
+        <td>1806.8</td>
+      </tr>
+      <tr>
+        <td><code>spatial_scale_720p</code></td>
+        <td>spatial</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>2225.2</td>
+      </tr>
+      <tr>
+        <td><code>spatial_scale_1080p</code></td>
+        <td>spatial</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>7982.7</td>
+      </tr>
+      <tr>
+        <td><code>color_contrast_plus_4pct</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4760.2</td>
+      </tr>
+      <tr>
+        <td><code>color_contrast_minus_4pct</code></td>
+        <td>color</td>
+        <td>99.9%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4286.5</td>
+      </tr>
+      <tr>
+        <td><code>color_saturation_plus_5pct</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4058.0</td>
+      </tr>
+      <tr>
+        <td><code>color_saturation_minus_5pct</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4051.4</td>
+      </tr>
+      <tr>
+        <td><code>color_brightness_plus_3pct</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>6382.1</td>
+      </tr>
+      <tr>
+        <td><code>color_brightness_minus_3pct</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>5227.1</td>
+      </tr>
+      <tr>
+        <td><code>color_gamma_0.9</code></td>
+        <td>color</td>
+        <td>99.7%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4142.6</td>
+      </tr>
+      <tr>
+        <td><code>color_gamma_1.1</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>6419.5</td>
+      </tr>
+      <tr>
+        <td><code>color_sharpen_mild</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>9549.4</td>
+      </tr>
+      <tr>
+        <td><code>color_blur_mild</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4185.4</td>
+      </tr>
+      <tr>
+        <td><code>color_combined</code></td>
+        <td>color</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4709.2</td>
+      </tr>
+      <tr>
+        <td><code>audio_original</code></td>
+        <td>audio</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4559.9</td>
+      </tr>
+      <tr>
+        <td><code>audio_removed</code></td>
+        <td>audio</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4125.8</td>
+      </tr>
+      <tr>
+        <td><code>audio_synthetic_speech</code></td>
+        <td>audio</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3988.3</td>
+      </tr>
+      <tr>
+        <td><code>audio_test_tone</code></td>
+        <td>audio</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4312.7</td>
+      </tr>
+      <tr>
+        <td><code>audio_multitone</code></td>
+        <td>audio</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3977.1</td>
+      </tr>
+      <tr>
+        <td><code>overlay_5pct</code></td>
+        <td>overlay</td>
+        <td>97.2%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>3976.2</td>
+      </tr>
+      <tr>
+        <td><code>overlay_10pct</code></td>
+        <td>overlay</td>
+        <td>94.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4125.4</td>
+      </tr>
+      <tr>
+        <td><code>overlay_15pct</code></td>
+        <td>overlay</td>
+        <td>95.2%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4227.8</td>
+      </tr>
+      <tr>
+        <td><code>overlay_small_logo</code></td>
+        <td>overlay</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4764.8</td>
+      </tr>
+      <tr>
+        <td><code>overlay_semitransparent_rect</code></td>
+        <td>overlay</td>
+        <td>93.7%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4130.4</td>
+      </tr>
+      <tr>
+        <td><code>overlay_top_banner</code></td>
+        <td>overlay</td>
+        <td>93.8%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4158.1</td>
+      </tr>
+      <tr>
+        <td><code>metadata_original</code></td>
+        <td>metadata</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4013.1</td>
+      </tr>
+      <tr>
+        <td><code>metadata_removed</code></td>
+        <td>metadata</td>
+        <td>100.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4395.2</td>
+      </tr>
+      <tr>
+        <td><code>combined_A_trim1s_crop5_contrast</code></td>
+        <td>combined</td>
+        <td>99.5%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4061.5</td>
+      </tr>
+      <tr>
+        <td><code>combined_B_trim1s_speed103_overlay10</code></td>
+        <td>combined</td>
+        <td>95.0%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>100.0%</td>
+        <td>4348.7</td>
+      </tr>
+      <tr>
+        <td><code>combined_C_aspect916_audio_meta</code></td>
+        <td>combined</td>
+        <td>64.8%</td>
+        <td><span class="badge badge-not-detected">NOT_DETECTED</span></td>
+        <td>64.8%</td>
+        <td>1569.4</td>
+      </tr>
+      <tr>
+        <td><code>combined_D_all</code></td>
+        <td>combined</td>
+        <td>89.2%</td>
+        <td><span class="badge badge-detected">DETECTED</span></td>
+        <td>99.2%</td>
+        <td>2089.6</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="footer">
+  <strong>Research Notice:</strong> This analysis is for research and algorithm evaluation only.
+  Not intended for bypassing content-identification systems.<br>
+  Generated by Video Fingerprint Research Pipeline v1.0
+</div>
+
+<script>
+const catLabels = ["original", "temporal", "spatial", "color", "audio", "overlay", "metadata", "combined"];
+const catDetectionRates = [100.0, 100.0, 71.4, 100.0, 100.0, 100.0, 100.0, 75.0];
+const catMeanSims = [100.0, 99.8, 87.0, 100.0, 100.0, 95.8, 100.0, 87.1];
+const expLabels = ["original", "temporal_trim_start_0.5s", "temporal_trim_start_1.0s", "temporal_trim_start_1.5s", "temporal_trim_start_2.0s", "temporal_trim_end_0.5s", "temporal_trim_end_1.0s", "temporal_trim_end_1.5s", "temporal_trim_end_2.0s", "temporal_speed_0.97x", "temporal_speed_0.98x", "temporal_speed_1.02x", "temporal_speed_1.03x", "spatial_crop_5pct", "spatial_crop_10pct", "spatial_crop_15pct", "spatial_center_crop", "spatial_aspect_9x16", "spatial_scale_720p", "spatial_scale_1080p", "color_contrast_plus_4pct", "color_contrast_minus_4pct", "color_saturation_plus_5pct", "color_saturation_minus_5pct", "color_brightness_plus_3pct", "color_brightness_minus_3pct", "color_gamma_0.9", "color_gamma_1.1", "color_sharpen_mild", "color_blur_mild", "color_combined", "audio_original", "audio_removed", "audio_synthetic_speech", "audio_test_tone", "audio_multitone", "overlay_5pct", "overlay_10pct", "overlay_15pct", "overlay_small_logo", "overlay_semitransparent_rect", "overlay_top_banner", "metadata_original", "metadata_removed", "combined_A_trim1s_crop5_contrast", "combined_B_trim1s_speed103_overlay10", "combined_C_aspect916_audio_meta", "combined_D_all"];
+const expScores = [100.0, 99.9, 99.9, 99.7, 99.7, 99.8, 99.8, 99.8, 99.8, 100.0, 100.0, 99.9, 99.6, 99.7, 89.8, 89.3, 65.2, 64.8, 100.0, 100.0, 100.0, 99.9, 100.0, 100.0, 100.0, 100.0, 99.7, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 97.2, 94.8, 95.2, 100.0, 93.7, 93.8, 100.0, 100.0, 99.5, 95.0, 64.8, 89.2];
+const expColors = ["#10b981", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#3b82f6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#8b5cf6", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#f59e0b", "#ef4444", "#ef4444", "#ef4444", "#ef4444", "#ef4444", "#ec4899", "#ec4899", "#ec4899", "#ec4899", "#ec4899", "#ec4899", "#6366f1", "#6366f1", "#14b8a6", "#14b8a6", "#14b8a6", "#14b8a6"];
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = '#334155';
+
+// Detection Rate Chart
+new Chart(document.getElementById('detectionChart'), {
+  type: 'bar',
+  data: {
+    labels: catLabels,
+    datasets: [{
+      label: 'Detection Rate (%)',
+      data: catDetectionRates,
+      backgroundColor: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'],
+      borderRadius: 8,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: { callback: v => v + '%' }
+      }
+    }
+  }
+});
+
+// Similarity Chart
+new Chart(document.getElementById('similarityChart'), {
+  type: 'bar',
+  data: {
+    labels: catLabels,
+    datasets: [{
+      label: 'Mean Similarity (%)',
+      data: catMeanSims,
+      backgroundColor: ['#10b98180', '#3b82f680', '#8b5cf680', '#f59e0b80', '#ef444480', '#ec489980', '#6366f180', '#14b8a680'],
+      borderColor: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'],
+      borderWidth: 2,
+      borderRadius: 8,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: { callback: v => v + '%' }
+      }
+    }
+  }
+});
+
+// Scatter Chart
+new Chart(document.getElementById('scatterChart'), {
+  type: 'bar',
+  data: {
+    labels: expLabels,
+    datasets: [{
+      label: 'Similarity (%)',
+      data: expScores,
+      backgroundColor: expColors.map(c => c + '80'),
+      borderColor: expColors,
+      borderWidth: 2,
+      borderRadius: 6,
+      borderSkipped: false,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y',
+    plugins: {
+      legend: { display: false },
+    },
+    scales: {
+      x: {
+        beginAtZero: true,
+        max: 100,
+        ticks: { callback: v => v + '%' }
+      },
+      y: {
+        ticks: {
+          font: { size: 9 },
+          autoSkip: false
+        }
+      }
+    }
+  }
+});
+</script>
+
+</body>
+</html>

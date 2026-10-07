@@ -39,8 +39,8 @@ def extract_urls_from_text(text: str) -> list[str]:
         return []
     # Regex to capture standard video clip links across supported platforms
     url_pattern = re.compile(
-        r'(https?://(?:www\.|m\.|mbasic\.|l\.)?(?:facebook\.com|instagram\.com|tiktok\.com)/(?:[^/"\'\s]+/videos/[^/"\'\s]+|reel/[^/"\'\s]+|reels/[^/"\'\s]+|watch/?\?[^\s"\'<>]+|@[^/"\'\s]+/video/[^/"\'\s]+|p/[^/"\'\s]+|v/[^/"\'\s]+|[^\s"\'<>]+))|'
-        r'(https?://fb\.watch/[^\s"\'<>]+)',
+        r'(https?://(?:www\.|m\.|mbasic\.|l\.)?(?:facebook\.com|instagram\.com|tiktok\.com|douyin\.com|iesdouyin\.com|reddit\.com)/(?:[^/"\'\s]+/videos/[^/"\'\s]+|reel/[^/"\'\s]+|reels/[^/"\'\s]+|watch/?\?[^\s"\'<>]+|@[^/"\'\s]+/video/[^/"\'\s]+|p/[^/"\'\s]+|v/[^/"\'\s]+|video/[^/"\'\s]+|note/[^/"\'\s]+|r/[^/"\'\s]+/comments/[^/"\'\s]+|comments/[^/"\'\s]+|[^\s"\'<>]+))|'
+        r'(https?://(?:fb\.watch|v\.douyin\.com|redd\.it|v\.redd\.it)/[^\s"\'<>]+)',
         re.IGNORECASE
     )
     matches = url_pattern.findall(text)
@@ -52,7 +52,7 @@ def extract_urls_from_text(text: str) -> list[str]:
                 continue
             clean = raw_url.split('?')[0].rstrip('/')
             # Avoid generic page routes or static navigation links
-            if any(k in clean.lower() for k in ['/reel/', '/videos/', '/watch', 'fb.watch', '/video/', '/p/']):
+            if any(k in clean.lower() for k in ['/reel/', '/videos/', '/watch', 'fb.watch', '/video/', '/p/', 'v.douyin.com', 'douyin.com', 'note/', '/comments/', 'redd.it', 'v.redd.it']):
                 discovered.add(clean)
     return list(discovered)
 
@@ -1176,3 +1176,93 @@ async def scrape_tiktok_profile(url: str, max_scrolls: int = 150, cookie_file: s
         "video_urls": final_urls,
         "error": "" if final_urls else "No TikTok clips could be extracted."
     }
+
+def extract_subreddit_name(url: str) -> str:
+    """Extracts clean subreddit name e.g. 'videos' from url."""
+    m = re.search(r'/r/([A-Za-z0-9_]+)', url)
+    if m:
+        return m.group(1).lower()
+    m_raw = re.search(r'^r/([A-Za-z0-9_]+)', url.strip(), re.IGNORECASE)
+    if m_raw:
+        return m_raw.group(1).lower()
+    return "reddit"
+
+async def scrape_subreddit(url: str, max_scrolls: int = 50, cookie_file: str = None) -> dict:
+    """
+    Headless browser scraper to harvest all video post URLs from a Subreddit (e.g. r/videos, r/funny).
+    Scrolls through the subreddit stream and extracts every unique /comments/ post link.
+    """
+    sub_name = extract_subreddit_name(url)
+    page_name = f"r_{sub_name}"
+    canonical_sub_url = f"https://www.reddit.com/r/{sub_name}/"
+    logger.info(f"Starting Subreddit harvest for: '{sub_name}' ({canonical_sub_url}) with max_scrolls={max_scrolls}")
+    
+    video_urls = []
+    seen = set()
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-blink-features=AutomationControlled'
+                ]
+            )
+            context = await browser.new_context(
+                viewport={'width': 1280, 'height': 900},
+                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            )
+            page = await context.new_page()
+            await page.goto(canonical_sub_url, wait_until='domcontentloaded', timeout=35000)
+            await asyncio.sleep(3)
+            
+            async def extract_page_links():
+                raw_links = await page.evaluate('''() => {
+                    return Array.from(document.querySelectorAll('a'))
+                        .map(a => a.href)
+                        .filter(h => h && h.includes('/comments/'));
+                }''')
+                new_found = 0
+                for l in raw_links:
+                    clean = l.split('?')[0].rstrip('/')
+                    if f"/r/{sub_name}/comments/" in clean.lower() or "/comments/" in clean.lower():
+                        if clean not in seen:
+                            seen.add(clean)
+                            video_urls.append(clean)
+                            new_found += 1
+                return new_found
+
+            await extract_page_links()
+            logger.info(f"[Initial] Discovered {len(video_urls)} posts from r/{sub_name}")
+            
+            no_new_rounds = 0
+            for scroll_idx in range(max_scrolls):
+                prev_count = len(video_urls)
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+                await page.keyboard.press("End")
+                await asyncio.sleep(2)
+                
+                await extract_page_links()
+                new_added = len(video_urls) - prev_count
+                if new_added > 0:
+                    logger.info(f"[Scroll {scroll_idx + 1}/{max_scrolls}] Found +{new_added} new posts (Total: {len(video_urls)})")
+                    no_new_rounds = 0
+                else:
+                    no_new_rounds += 1
+                    if no_new_rounds >= 5:
+                        logger.info(f"Subreddit scroll reached bottom after {scroll_idx + 1} scrolls.")
+                        break
+                        
+            await browser.close()
+    except Exception as e:
+        logger.error(f"Playwright Subreddit scrape error for r/{sub_name}: {e}")
+        
+    return {
+        "success": bool(video_urls),
+        "page_name": page_name,
+        "video_urls": video_urls,
+        "error": "" if video_urls else f"No posts found for Subreddit r/{sub_name}."
+    }
+

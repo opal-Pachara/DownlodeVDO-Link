@@ -3,9 +3,15 @@ import './index.css';
 
 const SUPPORTED_DOMAINS = [
   'tiktok.com',
+  'douyin.com',
+  'iesdouyin.com',
   'facebook.com',
   'fb.watch',
-  'instagram.com'
+  'instagram.com',
+  'reddit.com',
+  'redd.it',
+  'v.redd.it',
+  'redditmedia.com'
 ];
 
 const getApiBaseUrl = () => {
@@ -37,14 +43,14 @@ function App() {
     }
     
     const text = targetUrl.trim().toLowerCase();
-    const hasSupportedKeyword = SUPPORTED_DOMAINS.some(domain => text.includes(domain));
+    const hasSupportedKeyword = SUPPORTED_DOMAINS.some(domain => text.includes(domain)) || text.startsWith('r/');
     if (hasSupportedKeyword) {
       return { valid: true };
     }
     
     return { 
       valid: false, 
-      error: 'Unsupported content. Please paste a valid web link or copied text from TikTok, Facebook (Reels/Pages), or Instagram.' 
+      error: 'Unsupported content. Please paste a valid link from TikTok, Douyin, Facebook, Instagram, or Reddit (Post / Subreddit).' 
     };
   };
 
@@ -228,10 +234,12 @@ function App() {
         <header className="card-header">
           <h1 className="title" id="app-title">Video Downloader Pro</h1>
           <p className="subtitle" id="app-subtitle">
-            Simply <strong>paste a TikTok profile, Facebook Page/Reel, or Instagram link</strong>! Our Auto-Cookie technology seamlessly extracts <strong>100% of all videos</strong> into creator folders automatically.
+            Simply <strong>paste a TikTok profile, Reddit Subreddit/post, Douyin video, Facebook Page/Reel, or Instagram link</strong>! Our automated engine seamlessly extracts <strong>100% of all videos</strong> into creator folders automatically.
           </p>
           <div className="platform-badges" aria-label="Supported Platforms">
             <span className="badge active-feature">⚡ TikTok (100% Profile Harvest)</span>
+            <span className="badge active-feature">👽 Reddit (r/Subreddit Harvest)</span>
+            <span className="badge">🇨🇳 Douyin (抖音)</span>
             <span className="badge">Facebook (Pages & Reels)</span>
             <span className="badge">Instagram (Profiles & Reels)</span>
           </div>
@@ -243,18 +251,18 @@ function App() {
             <strong>แค่วางลิงก์ก็โหลดครบ 100% ไม่ติดขีดจำกัด 10 คลิปอีกต่อไป!</strong>
           </div>
           <p className="tip-description">
-            ระบบอัปเกรดใหม่ <strong>Auto-Cookie Sync</strong>: เมื่อคุณวางลิงก์หน้าเพจ Facebook (เช่น ลิงก์ช่อง Reels) ระบบหลังบ้านจะทำการดึงการเข้าถึงจากเบราว์เซอร์ Google Chrome ของคุณโดยอัตโนมัติ เพื่อสกรอลและดูดคลิปออกมา <strong>ครบทุกคลิปทั้งเพจ (100+ คลิป)</strong> แยกลงโฟลเดอร์ให้เองตามชื่อช่องครับ!
+            ระบบอัปเกรดใหม่: รองรับทั้ง <strong>TikTok, Reddit (ยกห้อง Subreddit เช่น r/videos หรือรายคลิป), Douyin, Facebook, Instagram</strong> ระบบจะดึงคลิปและแยกบันทึกโฟลเดอร์ตามชื่อช่องหรือชื่อ Subreddit (เช่น <code>VDO/r_videos/</code>) ให้อัตโนมัติครับ!
           </p>
         </div>
 
         <form className="download-form" id="download-form" onSubmit={handleDownload}>
           <div className="input-group">
-            <label htmlFor="video-url-input" className="input-label">Video Link or Facebook Page / Reels URL</label>
+            <label htmlFor="video-url-input" className="input-label">Video Link or Subreddit / Channel URL</label>
             <textarea
               id="video-url-input"
               className="url-input textarea-input"
               rows="3"
-              placeholder="Paste a single link here (e.g., https://www.facebook.com/profile.php?id=...&sk=reels_tab) and click download!"
+              placeholder="Paste link or text here (e.g. https://www.reddit.com/r/videos/, r/funny, TikTok, Douyin, Facebook, Instagram) and click download!"
               value={url}
               onChange={(e) => {
                 setUrl(e.target.value);

@@ -27,8 +27,91 @@ SUPPORTED_DOMAINS = [
     "tiktok.com",
     "facebook.com",
     "fb.watch",
-    "instagram.com"
+    "instagram.com",
+    "douyin.com",
+    "iesdouyin.com",
+    "reddit.com",
+    "redd.it",
+    "v.redd.it",
+    "redditmedia.com"
 ]
+
+def resolve_douyin_url(url: str) -> str:
+    """
+    Expands Douyin short links (v.douyin.com), mobile share URLs, and extracts the canonical
+    aweme video URL (https://www.douyin.com/video/<id>) for reliable yt-dlp extraction.
+    """
+    if not url or not url.strip():
+        return url
+    clean_url = url.strip()
+    if "douyin.com" not in clean_url.lower() and "iesdouyin.com" not in clean_url.lower():
+        return clean_url
+        
+    # Check if aweme ID is already present in standard video path
+    id_match = re.search(r'douyin\.com/video/(\d+)', clean_url)
+    if id_match:
+        return f"https://www.douyin.com/video/{id_match.group(1)}"
+        
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        }
+        resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=12)
+        candidates = [resp.url] + [r.headers.get('Location', '') for r in resp.history]
+        for cand in candidates:
+            m = re.search(r'/(?:video|note)/(\d+)', cand) or re.search(r'[?&](?:modal_id|aweme_id|video_id)=(\d+)', cand)
+            if m:
+                canonical = f"https://www.douyin.com/video/{m.group(1)}"
+                logger.info(f"Resolved Douyin short link '{clean_url}' -> '{canonical}'")
+                return canonical
+        if resp.url:
+            return resp.url
+    except Exception as e:
+        logger.warning(f"Failed to resolve Douyin short URL '{clean_url}': {e}")
+        
+    return clean_url
+
+def resolve_reddit_url(url: str) -> str:
+    """
+    Expands Reddit short links (redd.it, v.redd.it, and reddit.com/r/.../s/... mobile share links)
+    to canonical comments post URLs.
+    """
+    if not url or not url.strip():
+        return url
+    clean_url = url.strip()
+    if not any(domain in clean_url.lower() for domain in ["reddit.com", "redd.it", "v.redd.it"]):
+        return clean_url
+        
+    # Standard comments link already
+    if "/comments/" in clean_url:
+        return clean_url
+        
+    # redd.it/<id> can immediately convert to reddit.com/comments/<id>
+    m_short = re.search(r'redd\.it/([A-Za-z0-9]+)', clean_url)
+    if m_short and "v.redd.it" not in clean_url:
+        canonical = f"https://www.reddit.com/comments/{m_short.group(1)}"
+        logger.info(f"Resolved redd.it short link '{clean_url}' -> '{canonical}'")
+        return canonical
+        
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+        }
+        resp = requests.get(clean_url, headers=headers, allow_redirects=True, timeout=12)
+        if "/comments/" in resp.url:
+            logger.info(f"Resolved Reddit URL '{clean_url}' -> '{resp.url}'")
+            return resp.url
+        for r in resp.history:
+            loc = r.headers.get('Location', '')
+            if "/comments/" in loc:
+                return loc
+        return resp.url
+    except Exception as e:
+        logger.warning(f"Failed to resolve Reddit URL '{clean_url}': {e}")
+        
+    return clean_url
 
 def is_supported_url(url: str) -> tuple[bool, str]:
     if not url or not url.strip():
@@ -49,11 +132,11 @@ def is_supported_url(url: str) -> tuple[bool, str]:
             netloc = netloc[2:]
             
         if "youtube.com" in netloc or "youtu.be" in netloc:
-            return False, "YouTube downloads are disabled. Supported platforms: TikTok, Facebook, Instagram."
+            return False, "YouTube downloads are disabled. Supported platforms: TikTok, Douyin, Facebook, Instagram, Reddit."
             
         is_matched = any(netloc == domain or netloc.endswith(f".{domain}") for domain in SUPPORTED_DOMAINS)
         if not is_matched:
-            return False, f"Unsupported domain ({netloc}). Supported platforms: TikTok, Facebook, Instagram."
+            return False, f"Unsupported domain ({netloc}). Supported platforms: TikTok, Douyin, Facebook, Instagram, Reddit."
         
         return True, ""
     except Exception as e:
@@ -61,10 +144,28 @@ def is_supported_url(url: str) -> tuple[bool, str]:
 
 def process_download(url: str, target_folder: str = None) -> dict:
     url = url.strip()
+    # Extract link if text contains full copied message from mobile app
+    if not url.startswith("http://") and not url.startswith("https://"):
+        m_link = re.search(r'(https?://[^\s"\'<>]+)', url)
+        if m_link:
+            url = m_link.group(1)
+            
+    # Resolve Douyin short links (v.douyin.com) to canonical aweme URL
+    if "douyin.com" in url.lower() or "iesdouyin.com" in url.lower():
+        url = resolve_douyin_url(url)
+    elif any(d in url.lower() for d in ["reddit.com", "redd.it", "v.redd.it"]):
+        url = resolve_reddit_url(url)
+
     valid, err_message = is_supported_url(url)
     if not valid:
         logger.warning(f"Validation failed for URL '{url}': {err_message}")
         return {"success": False, "error": err_message}
+    
+    # Auto-extract subreddit folder (e.g. r_videos) for Reddit URLs if target_folder not specified
+    if not target_folder:
+        sub_match = re.search(r'/r/([A-Za-z0-9_]+)', url)
+        if sub_match:
+            target_folder = f"r_{sub_match.group(1)}"
     
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(backend_dir)
@@ -82,7 +183,12 @@ def process_download(url: str, target_folder: str = None) -> dict:
         save_tmpl = os.path.join(downloads_dir, '%(channel,uploader,playlist_title|General_Clips)s', '%(title).100s_%(id)s.%(ext)s')
     
     # Check if this video has already been downloaded (skip existing within target folder)
-    video_id_match = re.search(r'/video/(\d+)', url) or re.search(r'/(?:reel|reels)/([A-Za-z0-9_\-]+)', url) or re.search(r'/p/([A-Za-z0-9_\-]+)', url)
+    video_id_match = (
+        re.search(r'/video/(\d+)', url) or 
+        re.search(r'/(?:reel|reels)/([A-Za-z0-9_\-]+)', url) or 
+        re.search(r'/p/([A-Za-z0-9_\-]+)', url) or
+        re.search(r'/comments/([A-Za-z0-9]+)', url)
+    )
     if video_id_match:
         vid_id = video_id_match.group(1)
         # Strictly search ONLY within target_dir if safe_folder was specified to guarantee no cross-creator file pollution
@@ -146,7 +252,7 @@ def process_download(url: str, target_folder: str = None) -> dict:
         # HTTP headers to look more like a real browser
         'http_headers': {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-            'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7,zh-CN;q=0.6,zh;q=0.5',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         },
     }
@@ -157,13 +263,21 @@ def process_download(url: str, target_folder: str = None) -> dict:
         base_opts["cookiefile"] = cookie_file_path
         logger.info(f"Using exported Netscape cookies file located at {cookie_file_path}")
 
-    # Define fallback strategies for resilient extraction across TikTok, Facebook, and Instagram
+    # Define fallback strategies for resilient extraction across TikTok, Douyin, Facebook, and Instagram
     is_tiktok = "tiktok.com" in url.lower()
+    is_douyin = "douyin.com" in url.lower() or "iesdouyin.com" in url.lower()
     if is_tiktok:
         download_attempts = [
             {"desc": "Chrome browser TLS impersonation", "opts": {"impersonate": ImpersonateTarget("chrome")}},
             {"desc": "Chrome session cookies + TLS impersonation", "opts": {"cookiesfrombrowser": ("chrome", ), "impersonate": ImpersonateTarget("chrome")}},
             {"desc": "Edge session cookies + TLS impersonation",  "opts": {"cookiesfrombrowser": ("edge", ), "impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Standard extraction", "opts": {}},
+        ]
+    elif is_douyin:
+        download_attempts = [
+            {"desc": "Chrome browser TLS impersonation", "opts": {"impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Chrome session cookies + TLS impersonation", "opts": {"cookiesfrombrowser": ("chrome", ), "impersonate": ImpersonateTarget("chrome")}},
+            {"desc": "Safari session cookies + TLS impersonation", "opts": {"cookiesfrombrowser": ("safari", ), "impersonate": ImpersonateTarget("chrome")}},
             {"desc": "Standard extraction", "opts": {}},
         ]
     else:

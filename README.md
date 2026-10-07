@@ -30,8 +30,10 @@
 | :--- | :--- | :--- |
 | 🔴 **YouTube** | `youtube.com`, `youtu.be` | `https://www.youtube.com/watch?v=...`, `https://youtu.be/...` |
 | 🎵 **TikTok** | `tiktok.com` | `https://www.tiktok.com/@user/video/...` |
+| 🇨🇳 **Douyin (抖音)** | `douyin.com`, `v.douyin.com`, `iesdouyin.com` | `https://www.douyin.com/video/...`, `https://v.douyin.com/...` |
 | 🔵 **Facebook** | `facebook.com`, `fb.watch` | `https://www.facebook.com/share/v/...`, `https://fb.watch/...` |
 | 📸 **Instagram** | `instagram.com` | `https://www.instagram.com/p/...`, `https://www.instagram.com/reels/...` |
+| 👽 **Reddit** | `reddit.com`, `redd.it`, `v.redd.it` | `https://www.reddit.com/r/videos/`, `https://redd.it/...` |
 
 ---
 

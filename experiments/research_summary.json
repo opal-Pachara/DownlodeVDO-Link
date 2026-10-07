@@ -1,0 +1,74 @@
+{
+  "pipeline_version": "1.0",
+  "timestamp": "2026-10-06T17:21:20.040410+00:00",
+  "source_file": "raw_video.mp4",
+  "source_hash": "b6978201226cd1099137d0bc34c334698276fb1f756024e67be568a59925fca2",
+  "source_info": {
+    "duration": 10.0,
+    "width": 1920,
+    "height": 1080,
+    "fps": 30.0,
+    "codec": "h264",
+    "audio_present": true
+  },
+  "ffmpeg_version": "8.1.2",
+  "python_version": "3.14.6 (v3.14.6:c63aec69bd5, Jun 10 2026, 08:07:54) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "total_experiments": 48,
+  "statistics": {
+    "overall": {
+      "total_experiments": 48,
+      "detection_rate": 0.9375,
+      "mean_similarity": 0.9644,
+      "median_similarity": 0.9988,
+      "std_similarity": 0.0863,
+      "false_negative_rate": 0.0,
+      "false_positive_rate": 0.0
+    },
+    "per_category": {
+      "original": {
+        "detection_rate": 1.0,
+        "mean_similarity": 1.0,
+        "count": 1
+      },
+      "temporal": {
+        "detection_rate": 1.0,
+        "mean_similarity": 0.9981,
+        "count": 12
+      },
+      "spatial": {
+        "detection_rate": 0.7142857142857143,
+        "mean_similarity": 0.8697,
+        "count": 7
+      },
+      "color": {
+        "detection_rate": 1.0,
+        "mean_similarity": 0.9995,
+        "count": 11
+      },
+      "audio": {
+        "detection_rate": 1.0,
+        "mean_similarity": 1.0,
+        "count": 5
+      },
+      "overlay": {
+        "detection_rate": 1.0,
+        "mean_similarity": 0.9577,
+        "count": 6
+      },
+      "metadata": {
+        "detection_rate": 1.0,
+        "mean_similarity": 1.0,
+        "count": 2
+      },
+      "combined": {
+        "detection_rate": 0.75,
+        "mean_similarity": 0.8713,
+        "count": 4
+      }
+    }
+  },
+  "detection_threshold": 0.75,
+  "hash_frame_count": 16,
+  "hash_frame_size": "16x16",
+  "research_notice": "This analysis is for research and algorithm evaluation only. Not intended for bypassing content-identification systems."
+}

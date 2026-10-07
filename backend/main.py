@@ -8,12 +8,16 @@ if sys.platform == 'win32':
 import uuid
 import re
 import random
+import logging
 from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger("MainAPI")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 
 # Ensure backend directory is in sys.path for relative imports
 _current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -46,7 +50,7 @@ app.add_middleware(
 )
 
 class DownloadRequest(BaseModel):
-    url: str = Field(..., description="Target video URL from TikTok, Facebook, or Instagram")
+    url: str = Field(..., description="Target video URL from TikTok, Douyin, Facebook, or Instagram")
     download_type: str = Field("video", description="Type of media to download (video or image)")
     flip: bool = Field(False, description="Whether to flip video horizontally")
     brighten: bool = Field(False, description="Whether to slightly boost brightness and contrast")
@@ -127,6 +131,17 @@ def is_instagram_profile(url: str) -> bool:
         
     return False
 
+def is_reddit_subreddit(url: str) -> tuple[bool, str]:
+    u = url.lower().split("?")[0].rstrip("/")
+    if "reddit.com" not in u and "redd.it" not in u:
+        return False, ""
+    if "/comments/" in u or "redd.it/" in u:
+        return False, ""
+    sub_name = scraper.extract_subreddit_name(url)
+    if sub_name and sub_name != "reddit":
+        return True, sub_name
+    return False, ""
+
 async def apply_processing_to_items(
     items: list[dict],
     project_root: str,
@@ -181,6 +196,8 @@ async def apply_processing_to_items(
             })
         else:
             # Fallback to original if processing encountered an issue
+            err_msg = res.get("error", "Unknown processing error")
+            logger.warning(f"Video processing failed for '{raw_rel}': {err_msg}. Using raw downloaded video.")
             processed_items.append(itm)
             
     return processed_items
@@ -212,10 +229,15 @@ async def run_background_download_job(
             if len(single_match) == 1:
                 url = single_match[0].strip()
         
+        # Resolve Douyin short links (v.douyin.com) to canonical aweme URL
+        if "douyin.com" in url.lower() or "iesdouyin.com" in url.lower():
+            url = downloader.resolve_douyin_url(url)
+            job["url"] = url
+        
         # Reject YouTube URLs as requested
         if "youtube.com" in url.lower() or "youtu.be" in url.lower():
             job["status"] = "error"
-            job["error"] = "YouTube downloads are disabled. Supported platforms: TikTok, Facebook, Instagram."
+            job["error"] = "YouTube downloads are disabled. Supported platforms: TikTok, Douyin, Facebook, Instagram."
             job["progress_message"] = f"Error: {job['error']}"
             return
         
@@ -473,7 +495,71 @@ async def run_background_download_job(
                 job["progress_message"] = f"Error: {job['error']}"
                 return
 
-        # 4. Check for Smart Copy-Paste bulk text / multi-link extraction (Cmd+A -> Paste)
+        # 4. Check if target is a Reddit Subreddit (e.g. r/videos, r/funny)
+        is_sub, sub_name = is_reddit_subreddit(url)
+        if is_sub:
+            job["status"] = "scraping"
+            page_name = f"r_{sub_name}"
+            job["page_name"] = page_name
+            job["progress_message"] = f"⚡ Harvesting video posts from Subreddit 'r/{sub_name}'..."
+            
+            cookie_path = os.path.join(project_root, "cookies.txt")
+            cookie_file = cookie_path if os.path.exists(cookie_path) else None
+            
+            def run_sub_scraper_sync(u, s, c):
+                return asyncio.run(scraper.scrape_subreddit(u, max_scrolls=s, cookie_file=c))
+                
+            scrape_result = await asyncio.to_thread(run_sub_scraper_sync, url, 40, cookie_file)
+            if scrape_result.get("success") and scrape_result.get("video_urls"):
+                urls_to_download = scrape_result["video_urls"]
+                job["total_videos"] = len(urls_to_download)
+                job["status"] = "downloading"
+                job["progress_message"] = f"⚡ Found {len(urls_to_download)} posts from r/{sub_name} — Starting parallel download (5 concurrent)..."
+
+                semaphore_rd = asyncio.Semaphore(5)
+                lock_rd = asyncio.Lock()
+
+                async def download_one_reddit(post_url: str):
+                    async with semaphore_rd:
+                        await asyncio.sleep(random.uniform(0.5, 1.2))
+                        result = await asyncio.to_thread(downloader.process_download, post_url, target_folder=page_name)
+                        if result.get("success"):
+                            raw_items = result.get("items", [{
+                                "filename": result["filename"],
+                                "download_url": result["download_url"],
+                                "title": result["filename"],
+                                "rel_path": result.get("filename")
+                            }])
+                            final_items = await apply_processing_to_items(
+                                raw_items, project_root, flip, brighten, watermark_text,
+                                watermark_position, watermark_opacity=watermark_opacity,
+                                anti_detection=anti_detection, job=job
+                            )
+                            async with lock_rd:
+                                job["items"].extend(final_items)
+                                job["completed_videos"] += 1
+                                remaining = job['total_videos'] - job['completed_videos']
+                                skipped_note = " (skipped existing)" if result.get("skipped") else ""
+                                job["progress_message"] = (
+                                    f"⬇️ Downloading {job['completed_videos']}/{job['total_videos']} clips{skipped_note} "
+                                    f"({remaining} remaining) — 5 concurrent threads"
+                                )
+
+                await asyncio.gather(*[download_one_reddit(u) for u in urls_to_download])
+
+                job["status"] = "completed"
+                folder_target = f"VDO_processed/{page_name}" if is_processing_active else f"VDO/{page_name}"
+                skipped = job['total_videos'] - job['completed_videos']
+                skip_msg = f" (skipped {skipped} non-video/external link posts)" if skipped > 0 else ""
+                job["progress_message"] = f"✅ Successfully saved {job['completed_videos']} Reddit video(s){skip_msg} into {folder_target}!"
+                return
+            else:
+                job["status"] = "error"
+                job["error"] = scrape_result.get("error", f"Could not find any video posts in Subreddit r/{sub_name}.")
+                job["progress_message"] = f"Error: {job['error']}"
+                return
+
+        # 5. Check for Smart Copy-Paste bulk text / multi-link extraction (Cmd+A -> Paste)
         extracted_urls = scraper.extract_urls_from_text(url)
         if len(extracted_urls) > 1:
             job["status"] = "downloading"
